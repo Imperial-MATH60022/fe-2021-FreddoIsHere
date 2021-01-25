@@ -20,14 +20,16 @@ def lagrange_points(cell, degree):
     <ex-lagrange-points>`.
 
     """
-    if cell.dim > 1:
+    if cell.dim > 1:  # two-dimensional case
         equi_lag_points = []
+        # Computing equally spaced points
         for i, j in product(range(degree+1), repeat=2):
             if i + j <= degree:
                 equi_lag_points.append([i/degree, j/degree])
-    else:
-        a = np.min(cell.vertices)
-        b = np.max(cell.vertices)
+    else:  # one-dimensional case
+        a = np.min(cell.vertices)  # beginning of the interval
+        b = np.max(cell.vertices)  # end of the interval
+        # Computing equally spaced points
         equi_lag_points = [[a + (b - a) * (i / degree)] for i in range(degree+1)]
     return np.array(equi_lag_points)
 
@@ -46,14 +48,15 @@ def vandermonde_matrix(cell, degree, points, grad=False):
     The implementation of this function is left as an :ref:`exercise
     <ex-vandermonde>`.
     """
-
+    #  Computing number of coefficients
     num_coeffs = int(np.round(comb(degree + cell.dim, cell.dim)))
-    print(cell.dim)
-    if cell.dim > 1:
+    if cell.dim > 1:  # two-dimensional case
         matrix = []
+        # Computing Vandermonde entries
         for i in range(degree+1):
             matrix += [np.multiply(np.power(points[:, None, 0], i - j), np.power(points[:, None, 1], j)) for j in range(i+1)]
-    else:
+    else:  # one-dimensional case
+        # Computing Vandermonde entries
         matrix = np.array([np.power(points, i) for i in range(num_coeffs)])
     return np.hstack(matrix)
 
