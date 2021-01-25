@@ -47,7 +47,15 @@ def vandermonde_matrix(cell, degree, points, grad=False):
     <ex-vandermonde>`.
     """
 
-    raise NotImplementedError
+    num_coeffs = int(np.round(comb(degree + cell.dim, cell.dim)))
+    print(cell.dim)
+    if cell.dim > 1:
+        matrix = []
+        for i in range(degree+1):
+            matrix += [np.multiply(np.power(points[:, None, 0], i - j), np.power(points[:, None, 1], j)) for j in range(i+1)]
+    else:
+        matrix = np.array([np.power(points, i) for i in range(num_coeffs)])
+    return np.hstack(matrix)
 
 
 class FiniteElement(object):
