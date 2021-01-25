@@ -1,6 +1,8 @@
 # Cause division to always mean floating point division.
 from __future__ import division
+from scipy.special import comb
 import numpy as np
+from itertools import product
 from .reference_elements import ReferenceInterval, ReferenceTriangle
 np.seterr(invalid='ignore', divide='ignore')
 
@@ -18,8 +20,16 @@ def lagrange_points(cell, degree):
     <ex-lagrange-points>`.
 
     """
-
-    raise NotImplementedError
+    if cell.dim > 1:
+        equi_lag_points = []
+        for i, j in product(range(degree+1), repeat=2):
+            if i + j <= degree:
+                equi_lag_points.append([i/degree, j/degree])
+    else:
+        a = np.min(cell.vertices)
+        b = np.max(cell.vertices)
+        equi_lag_points = [[a + (b - a) * (i / degree)] for i in range(degree+1)]
+    return np.array(equi_lag_points)
 
 
 def vandermonde_matrix(cell, degree, points, grad=False):
