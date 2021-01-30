@@ -48,16 +48,15 @@ def vandermonde_matrix(cell, degree, points, grad=False):
     The implementation of this function is left as an :ref:`exercise
     <ex-vandermonde>`.
     """
-    #  Computing number of coefficients
-    num_coeffs = int(np.round(comb(degree + cell.dim, cell.dim)))
     if cell.dim > 1:  # two-dimensional case
         matrix = []
         # Computing Vandermonde entries
         for i in range(degree+1):
-            matrix += [np.multiply(np.power(points[:, None, 0], i - j), np.power(points[:, None, 1], j)) for j in range(i+1)]
+            matrix += [np.multiply(np.power(points[:, None, 0], i - j),
+                                   np.power(points[:, None, 1], j)) for j in range(i+1)]
     else:  # one-dimensional case
         # Computing Vandermonde entries
-        matrix = np.array([np.power(points, i) for i in range(num_coeffs)])
+        matrix = np.array([np.power(points, i) for i in range(degree+1)])
     return np.hstack(matrix)
 
 
@@ -100,8 +99,8 @@ class FiniteElement(object):
         # Replace this exception with some code which sets
         # self.basis_coefs
         # to an array of polynomial coefficients defining the basis functions.
-        raise NotImplementedError
-
+        V = vandermonde_matrix(cell, degree, nodes)
+        self.basis_coefs = np.linalg.inv(V)
         #: The number of nodes in this element.
         self.node_count = nodes.shape[0]
 
@@ -125,8 +124,8 @@ class FiniteElement(object):
         <ex-tabulate>`.
 
         """
-
-        raise NotImplementedError
+        V = vandermonde_matrix(self.cell, self.degree, points)
+        return V @ self.basis_coefs
 
     def interpolate(self, fn):
         """Interpolate fn onto this finite element by evaluating it
@@ -165,7 +164,7 @@ class LagrangeElement(FiniteElement):
         <ex-lagrange-element>`.
         """
 
-        raise NotImplementedError
+        nodes = lagrange_points(cell, degree)
         # Use lagrange_points to obtain the set of nodes.  Once you
         # have obtained nodes, the following line will call the
         # __init__ method on the FiniteElement class to set up the
