@@ -42,25 +42,21 @@ def vandermonde_matrix(cell, degree, points, grad=False):
     The implementation of this function is left as an :ref:`exercise
     <ex-vandermonde>`.
     """
+
+    def column(i, idx, j):  # computes single column of vandermonde matrix
+        exp_1 = max([(i - j) - grad * (1 - idx), 0])  # (i-j) for grad=False
+        exp_2 = max([j - grad * idx, 0])  # j for grad=False
+        return np.multiply(points[:, None, 0] ** exp_1, points[:, None, -1] ** exp_2)
+
     matrix = []
-
-    def column(i, idx_1, idx_2, j):
-        return np.multiply(points[:, None, idx_1] ** (i - j), points[:, None, idx_2] ** j)
-
-    def grad_column(i, idx, j):
-        return ((1 - idx) * (i - j) + idx * j) * np.multiply(points[:, None, 0] ** max([(i - j) - (1 - idx) * grad, 0]), points[:, None, -1] ** max([j - grad * idx, 0]))
-
-    if grad:
+    if grad:  # i loops over the degrees, j loops over the columns containing the polynomials of degree at most i
         for i in range(degree + 1):
-            matrix += [np.concatenate([grad_column(i, k, j) for k in range(cell.dim)], axis=-1) for j in
-                       range((cell.dim - 1) * i + 1)] # j along column package # k along pointdim
+            matrix += [np.hstack([((i - j) * (1 - k) + j * k) * column(i, k, j) for k in range(cell.dim)])
+                       for j in range((cell.dim - 1) * i + 1)]  # k loops over the dimensions of a point
         return np.swapaxes(matrix, 0, 1)
-    else:
-        for i in range(degree + 1):
-            matrix += [column(i, 0, -1, j) for j in
-                       range((cell.dim - 1) * i + 1)]  # If cell.dim=1 it only squares the points and j=0
-
-        return np.hstack(matrix)
+    for i in range(degree + 1):
+        matrix += [column(i, 0, j) for j in range((cell.dim - 1) * i + 1)]
+    return np.hstack(matrix)
 
 
 class FiniteElement(object):
