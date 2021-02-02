@@ -4,6 +4,7 @@ from scipy.special import comb
 import numpy as np
 from itertools import product
 from .reference_elements import ReferenceInterval, ReferenceTriangle
+
 np.seterr(invalid='ignore', divide='ignore')
 
 
@@ -20,17 +21,10 @@ def lagrange_points(cell, degree):
     <ex-lagrange-points>`.
 
     """
-    if cell.dim > 1:  # two-dimensional case
-        equi_lag_points = []
-        # Computing equally spaced points
-        for i, j in product(range(degree+1), repeat=2):
-            if i + j <= degree:
-                equi_lag_points.append([i/degree, j/degree])
-    else:  # one-dimensional case
-        a = np.min(cell.vertices)  # beginning of the interval
-        b = np.max(cell.vertices)  # end of the interval
-        # Computing equally spaced points
-        equi_lag_points = [[a + (b - a) * (i / degree)] for i in range(degree+1)]
+    equi_lag_points = []
+    for i in product(range(degree + 1), repeat=cell.dim):  # if cell.dim=2, is all (i, j) combinations
+        if sum(i) <= degree:  # if cell.dim=1, trivially true
+            equi_lag_points.append(np.array(i) / degree)
     return np.array(equi_lag_points)
 
 
@@ -48,16 +42,25 @@ def vandermonde_matrix(cell, degree, points, grad=False):
     The implementation of this function is left as an :ref:`exercise
     <ex-vandermonde>`.
     """
-    if cell.dim > 1:  # two-dimensional case
-        matrix = []
-        # Computing Vandermonde entries
-        for i in range(degree+1):
-            matrix += [np.multiply(np.power(points[:, None, 0], i - j),
-                                   np.power(points[:, None, 1], j)) for j in range(i+1)]
-    else:  # one-dimensional case
-        # Computing Vandermonde entries
-        matrix = np.array([np.power(points, i) for i in range(degree+1)])
-    return np.hstack(matrix)
+    matrix = []
+
+    def column(i, idx_1, idx_2, j):
+        return np.multiply(points[:, None, idx_1] ** (i - j), points[:, None, idx_2] ** j)
+
+    def grad_column(i, idx, j):
+        return ((1 - idx) * (i - j) + idx * j) * np.multiply(points[:, None, 0] ** max([(i - j) - (1 - idx) * grad, 0]), points[:, None, -1] ** max([j - grad * idx, 0]))
+
+    if grad:
+        for i in range(degree + 1):
+            matrix += [np.concatenate([grad_column(i, k, j) for k in range(cell.dim)], axis=-1) for j in
+                       range((cell.dim - 1) * i + 1)] # j along column package # k along pointdim
+        return np.swapaxes(matrix, 0, 1)
+    else:
+        for i in range(degree + 1):
+            matrix += [column(i, 0, -1, j) for j in
+                       range((cell.dim - 1) * i + 1)]  # If cell.dim=1 it only squares the points and j=0
+
+        return np.hstack(matrix)
 
 
 class FiniteElement(object):
@@ -94,7 +97,7 @@ class FiniteElement(object):
             #: ``nodes_per_entity[d]`` is the number of entities
             #: associated with an entity of dimension d.
             self.nodes_per_entity = np.array([len(entity_nodes[d][0])
-                                              for d in range(cell.dim+1)])
+                                              for d in range(cell.dim + 1)])
 
         # Replace this exception with some code which sets
         # self.basis_coefs
