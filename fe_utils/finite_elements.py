@@ -123,6 +123,9 @@ class FiniteElement(object):
         <ex-tabulate>`.
 
         """
+        if grad:
+            T = vandermonde_matrix(self.cell, self.degree, points, grad)
+            return np.einsum("ijk,jl->ilk", T, self.basis_coefs)
         V = vandermonde_matrix(self.cell, self.degree, points)
         return V @ self.basis_coefs
 
