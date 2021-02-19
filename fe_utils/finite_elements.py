@@ -1,6 +1,5 @@
 # Cause division to always mean floating point division.
 from __future__ import division
-from scipy.special import comb
 import numpy as np
 from itertools import product
 from .reference_elements import ReferenceInterval, ReferenceTriangle
@@ -24,7 +23,7 @@ def lagrange_points(cell, degree):
     equi_lag_points = []
     for i in product(range(degree + 1), repeat=cell.dim):  # if cell.dim=2, is all (i, j) combinations
         if sum(i) <= degree:  # if cell.dim=1, trivially true
-            equi_lag_points.append(np.array(i) / degree)
+            equi_lag_points.append(np.array(i[::-1]) / degree)
     return np.array(equi_lag_points)
 
 
@@ -167,8 +166,21 @@ class LagrangeElement(FiniteElement):
         """
 
         nodes = lagrange_points(cell, degree)
+        entity_nodes = {
+            d: {i: [] for i in range(cell.entity_counts[d])} for d in range(cell.dim+1)
+        }
+
+        def add_entity_node(n_idx, n):
+            for d in range(cell.dim+1):
+                for i in range(cell.entity_counts[d]):
+                    if cell.point_in_entity(n, (d, i)):
+                        entity_nodes[d][i].append(n_idx)
+                        return
+
+        for n_idx, n in enumerate(nodes):
+            add_entity_node(n_idx, n)
         # Use lagrange_points to obtain the set of nodes.  Once you
         # have obtained nodes, the following line will call the
         # __init__ method on the FiniteElement class to set up the
         # basis coefficients.
-        super(LagrangeElement, self).__init__(cell, degree, nodes)
+        super(LagrangeElement, self).__init__(cell, degree, nodes, entity_nodes)
