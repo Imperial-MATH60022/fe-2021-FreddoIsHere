@@ -3,6 +3,7 @@ import numpy as np
 import itertools
 from .finite_elements import LagrangeElement
 from .reference_elements import ReferenceTriangle, ReferenceInterval
+from .function_spaces import FunctionSpace
 
 
 class Mesh(object):
@@ -71,6 +72,7 @@ class Mesh(object):
         #: :class:`Mesh` is composed.
         self.cell = (0, ReferenceInterval, ReferenceTriangle)[self.dim]
 
+
     def adjacency(self, dim1, dim2):
         """Return the set of `dim2` entities adjacent to each `dim1`
         entity. For example if `dim1==2` and `dim2==1` then return the list of
@@ -110,8 +112,17 @@ class Mesh(object):
         :param c: The number of the cell for which to return the Jacobian.
         :result: The Jacobian for cell ``c``.
         """
+        cg1 = LagrangeElement(self.cell, 1)
+        # gradient degree 1 Lagrange basis
+        self.grad_psi = cg1.tabulate(self.vertex_coords[self.cell_vertices[c]], grad=True)[0]
+        cg1fs = FunctionSpace(self, cg1)
 
-        raise NotImplementedError
+        bar_xs = self.vertex_coords[cg1fs.cell_nodes[c, :], :]  # coordinates of the corresponding vertices of cell c
+        jac = np.zeros((bar_xs.shape[1], self.grad_psi.shape[1]))
+        for alpha in range(jac.shape[0]):
+            for beta in range(jac.shape[1]):
+                jac[alpha, beta] = np.sum(np.multiply(bar_xs[:, alpha], self.grad_psi[:, beta]))  # Equation 5.12
+        return jac
 
 
 class UnitIntervalMesh(Mesh):
