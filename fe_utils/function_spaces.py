@@ -5,6 +5,7 @@ from matplotlib import pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 from matplotlib.tri import Triangulation
 from itertools import product
+from .quadrature import gauss_quadrature
 
 
 class FunctionSpace(object):
@@ -175,5 +176,14 @@ class Function(object):
         """Integrate this :class:`Function` over the domain.
 
         :result: The integral (a scalar)."""
+        fe = self.function_space.element
+        Q = gauss_quadrature(fe.cell, fe.degree)
+        phi = fe.tabulate(Q.points)
+        integral = 0
+        for c in range(self.function_space.mesh.entity_counts[-1]):
+            nodes = self.function_space.cell_nodes[c, :]
+            J = self.function_space.mesh.jacobian(c)
+            detJ = np.abs(np.linalg.det(J))
+            integral += (self.values[nodes] @ phi.T) @ Q.weights * detJ
 
-        raise NotImplementedError
+        return integral
