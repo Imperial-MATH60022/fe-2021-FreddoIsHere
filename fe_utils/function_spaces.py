@@ -177,13 +177,13 @@ class Function(object):
 
         :result: The integral (a scalar)."""
         fe = self.function_space.element
-        Q = gauss_quadrature(fe.cell, fe.degree)
-        phi = fe.tabulate(Q.points)
+        Q = gauss_quadrature(fe.cell, fe.degree)  # 1. Quadrature Rule
+        phi = fe.tabulate(Q.points)  # 2. Tabulation
         integral = 0
         for c in range(self.function_space.mesh.entity_counts[-1]):
             nodes = self.function_space.cell_nodes[c, :]
             J = self.function_space.mesh.jacobian(c)
-            detJ = np.abs(np.linalg.det(J))
-            integral += (self.values[nodes] @ phi.T) @ Q.weights * detJ
+            detJ = np.abs(np.linalg.det(J))  # |J|
+            integral += (self.values[nodes] @ phi.T) @ Q.weights * detJ  # sum over each cell
 
         return integral

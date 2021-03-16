@@ -8,6 +8,7 @@ from numpy import cos, pi
 import scipy.sparse as sp
 import scipy.sparse.linalg as splinalg
 from argparse import ArgumentParser
+from itertools import product
 
 
 def assemble(fs, f):
@@ -15,11 +16,13 @@ def assemble(fs, f):
     the function space in which to solve and the right hand side
     function."""
 
-    raise NotImplementedError
-
     # Create an appropriate (complete) quadrature rule.
+    Q = gauss_quadrature(fs.element.cell, fs.element.degree)
 
     # Tabulate the basis functions and their gradients at the quadrature points.
+    phi = fs.element.tabulate(Q.points)  # (points, nodes)
+    phi_grad = fs.element.tabulate(Q.points, grad=True)  # (points, nodes, dim)
+    # ∇_XΦ_j^(X_q) = phi_grad[X_q, j]
 
     # Create the left hand side matrix and right hand side vector.
     # This creates a sparse matrix because creating a dense one may
@@ -28,6 +31,31 @@ def assemble(fs, f):
     l = np.zeros(fs.node_count)
 
     # Now loop over all the cells and assemble A and l
+    nodes = fs.cell_nodes
+    for c in range(nodes.shape[0]):
+        cell_nodes = fs.cell_nodes[c, :]
+        J = fs.mesh.jacobian(c)
+        detJ = np.abs(np.linalg.det(J))
+        l[cell_nodes] += (phi.T*Q.weights) @ (f.values[cell_nodes] @ phi.T) * detJ
+
+    for c in range(nodes.shape[0]):
+        J = fs.mesh.jacobian(c)
+        inv_J = np.linalg.inv(J)
+        detJ = np.abs(np.linalg.det(J))
+        # m is a ixj matrix for 1 2 it is 6x6
+        phi_i = Q.weights.T @ phi
+        phi_ij = phi_i.reshape(-1, 1) @ phi_i.reshape(1, -1)
+        phi_i_grad = np.tensordot(phi_grad, inv_J, axes=1)
+        phi_product = phi_i_grad @ phi_i_grad.swapaxes(1, 2)
+        A[np.ix_(nodes[c, :], nodes[c, :])] += \
+            (np.sum(Q.weights.reshape((-1,) + (1,)*(phi_product.ndim - 1))*phi_product, axis=0) + phi_ij)*detJ
+        """
+        for i, j in product(range(phi.shape[1]), range(phi.shape[1])):
+            A[nodes[c, i], nodes[c, j]] += np.sum([
+                ((inv_J.T @ phi_grad[q_idx, i]) @ (inv_J.T @ phi_grad[q_idx, j]) + phi[q_idx, i] * phi[q_idx, j])*detJ
+                for q_idx, q in enumerate(Q.weights)
+            ])
+        """
 
     return A, l
 
