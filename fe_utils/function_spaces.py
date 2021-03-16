@@ -34,14 +34,12 @@ class FunctionSpace(object):
         #: which each row lists the global nodes incident to the corresponding
         #: cell. The implementation of this member is left as an
         #: :ref:`exercise <ex-function-space>`
-        self.cell_nodes = np.zeros((mesh.entity_counts[-1], element.node_count))
-        for c_idx, delta in product(range(mesh.entity_counts[-1]), range(len(element.entity_nodes))):
-            for epsilon in range(len(element.entity_nodes[delta])):
+        self.cell_nodes = np.zeros((mesh.entity_counts[-1], element.node_count), dtype=int)
+        for c_idx, delta in product(range(mesh.cell_vertices.shape[0]), range(mesh.cell.dim+1)):
+            for epsilon in range(mesh.cell.entity_counts[delta]):
                 locals = element.entity_nodes[delta][epsilon]  # e(δ,ϵ) as in the notes
                 i = c_idx if delta == mesh.cell.dim else mesh.adjacency(mesh.cell.dim, delta)[c_idx, epsilon]
                 self.cell_nodes[c_idx, locals] = [G(delta, i) + n for n in range(element.nodes_per_entity[delta])]
-        self.cell_nodes = np.array(self.cell_nodes, dtype=int)
-
 
         #: The total number of nodes in the function space.
         self.node_count = np.dot(element.nodes_per_entity, mesh.entity_counts)
