@@ -114,16 +114,12 @@ class Mesh(object):
         """
         cg1 = LagrangeElement(self.cell, 1)
         # gradient degree 1 Lagrange basis
-        self.grad_psi = cg1.tabulate(lagrange_points(self.cell, 1), grad=True)[0]
-        print(self.grad_psi)
         cg1fs = FunctionSpace(self, cg1)
+        self.grad_psi = cg1.tabulate(cg1fs.element.nodes, grad=True)[0]
 
         bar_xs = self.vertex_coords[cg1fs.cell_nodes[c, :], :]  # coordinates of the corresponding vertices of cell c
-        jac = np.zeros((bar_xs.shape[1], self.grad_psi.shape[1]))
-        for alpha in range(jac.shape[0]):
-            for beta in range(jac.shape[1]):
-                jac[alpha, beta] = np.sum(np.multiply(bar_xs[:, alpha], self.grad_psi[:, beta]))  # Equation 5.12
-        return jac
+
+        return bar_xs.T @ self.grad_psi
 
 
 class UnitIntervalMesh(Mesh):
