@@ -72,6 +72,12 @@ class Mesh(object):
         #: :class:`Mesh` is composed.
         self.cell = (0, ReferenceInterval, ReferenceTriangle)[self.dim]
 
+        # For Jacobian
+        cg1 = LagrangeElement(self.cell, 1)
+        # gradient degree 1 Lagrange basis
+        self.cg1fs = FunctionSpace(self, cg1)
+        self.grad_psi = cg1.tabulate(self.cg1fs.element.nodes, grad=True)[0]
+
 
     def adjacency(self, dim1, dim2):
         """Return the set of `dim2` entities adjacent to each `dim1`
@@ -112,12 +118,7 @@ class Mesh(object):
         :param c: The number of the cell for which to return the Jacobian.
         :result: The Jacobian for cell ``c``.
         """
-        cg1 = LagrangeElement(self.cell, 1)
-        # gradient degree 1 Lagrange basis
-        cg1fs = FunctionSpace(self, cg1)
-        self.grad_psi = cg1.tabulate(cg1fs.element.nodes, grad=True)[0]
-
-        bar_xs = self.vertex_coords[cg1fs.cell_nodes[c, :], :]  # coordinates of the corresponding vertices of cell c
+        bar_xs = self.vertex_coords[self.cg1fs.cell_nodes[c, :], :]  # coordinates of the corresponding vertices of cell c
 
         return bar_xs.T @ self.grad_psi
 

@@ -17,7 +17,8 @@ def assemble(fs, f):
     function."""
 
     # Create an appropriate (complete) quadrature rule.
-    Q = gauss_quadrature(fs.element.cell, fs.element.degree)
+    cg1 = LagrangeElement(fs.mesh.cell, fs.element.degree + 20) # 4 for helmholtz.py 1 2
+    Q = gauss_quadrature(cg1.cell, cg1.degree)
 
     # Tabulate the basis functions and their gradients at the quadrature points.
     phi = fs.element.tabulate(Q.points)  # (points, nodes)
@@ -43,12 +44,16 @@ def assemble(fs, f):
         inv_J = np.linalg.inv(J)
         detJ = np.abs(np.linalg.det(J))
         # m is a ixj matrix for 1 2 it is 6x6
-        phi_i = Q.weights.T @ phi
-        phi_ij = phi_i.reshape(-1, 1) @ phi_i.reshape(1, -1)
+        J_phi_grad = np.einsum("dk, pnk->nk", inv_J, phi_grad*Q.weights.reshape(-1, 1, 1))
+        J_phi_grad_T = np.einsum("dk, pnk->nk", inv_J, phi_grad).T
+        sum = J_phi_grad @ J_phi_grad_T + Q.weights*phi.T @ phi
+        A[np.ix_(nodes[c, :], nodes[c, :])] += sum*detJ
+        """phi_ij = phi_i.reshape(-1, 1) @ phi_i.reshape(1, -1)
         phi_i_grad = np.tensordot(phi_grad, inv_J, axes=1)
         phi_product = phi_i_grad @ phi_i_grad.swapaxes(1, 2)
         A[np.ix_(nodes[c, :], nodes[c, :])] += \
             (np.sum(Q.weights.reshape((-1,) + (1,)*(phi_product.ndim - 1))*phi_product, axis=0) + phi_ij)*detJ
+        """
         """
         for i, j in product(range(phi.shape[1]), range(phi.shape[1])):
             A[nodes[c, i], nodes[c, j]] += np.sum([
