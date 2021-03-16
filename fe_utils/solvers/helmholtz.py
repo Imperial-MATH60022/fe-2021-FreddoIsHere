@@ -17,13 +17,11 @@ def assemble(fs, f):
     function."""
 
     # Create an appropriate (complete) quadrature rule.
-    cg1 = LagrangeElement(fs.mesh.cell, fs.element.degree + 2) # 4 for helmholtz.py 1 2
-    Q = gauss_quadrature(cg1.cell, cg1.degree)
+    Q = gauss_quadrature(fs.mesh.cell, fs.element.degree + 2)
 
     # Tabulate the basis functions and their gradients at the quadrature points.
     phi = fs.element.tabulate(Q.points)  # (points, nodes)
     phi_grad = fs.element.tabulate(Q.points, grad=True)  # (points, nodes, dim)
-    # ∇_XΦ_j^(X_q) = phi_grad[X_q, j]
 
     # Create the left hand side matrix and right hand side vector.
     # This creates a sparse matrix because creating a dense one may
@@ -37,16 +35,16 @@ def assemble(fs, f):
         cell_nodes = fs.cell_nodes[c, :]
         J = fs.mesh.jacobian(c)
         detJ = np.abs(np.linalg.det(J))
-        l[cell_nodes] += (phi.T*Q.weights) @ (f.values[cell_nodes] @ phi.T) * detJ
+        l[cell_nodes] += (Q.weights*phi.T) @ (f.values[cell_nodes] @ phi.T) * detJ
 
     for c in range(nodes.shape[0]):
         J = fs.mesh.jacobian(c)
         inv_J = np.linalg.inv(J)
         detJ = np.abs(np.linalg.det(J))
-        phi_ij = Q.weights*phi.T @ phi
-        phi_i_grad = np.einsum("dk, pnk->pnd", inv_J.T, phi_grad)
-        phi_product = np.einsum("p, pnk->nk", Q.weights, phi_i_grad @ phi_i_grad.swapaxes(1, 2))
-        A[np.ix_(nodes[c, :], nodes[c, :])] += (phi_product + phi_ij) * detJ
+        phi_2 = Q.weights*phi.T @ phi
+        inv_J_phi_grad = np.einsum("dk, pnk->pnd", inv_J.T, phi_grad)
+        q_inv_J_phi_grad = np.einsum("p, pnk->nk", Q.weights, inv_J_phi_grad @ inv_J_phi_grad.swapaxes(1, 2))
+        A[np.ix_(nodes[c, :], nodes[c, :])] += (q_inv_J_phi_grad + phi_2) * detJ
 
     return A, l
 
