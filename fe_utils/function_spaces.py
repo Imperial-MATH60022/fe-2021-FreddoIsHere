@@ -87,16 +87,12 @@ class Function(object):
         if isinstance(fs.element, VectorFiniteElement):
             vcg1 = VectorFiniteElement(cg1)
             coord_map = vcg1.tabulate(fs.element.nodes)  # (points, nodes, dim)
-            vcg1fs = FunctionSpace(fs.mesh, vcg1)
-
             for c in range(fs.mesh.entity_counts[-1]):
                 # Interpolate the coordinates to the cell nodes.
-                vertex_coords = fs.mesh.vertex_coords[vcg1fs.cell_nodes[c, :], :]
-                print(vertex_coords.shape, coord_map.shape, fs.element.node_weights.shape)
-                #node_coords = np.einsum("pnd, kd-> pp", coord_map, vertex_coords)
-                print(fs.cell_nodes[c, :].shape)
-
-                #self.values[fs.cell_nodes[c, :]] = [fn(fs.element.node_weights @ x) for x in node_coords]
+                vertex_coords = fs.mesh.vertex_coords[cg1fs.cell_nodes[c, :], :]
+                node_coords = np.einsum("pkl, kd-> pd", coord_map, vertex_coords)
+                self.values[fs.cell_nodes[c, :]] = \
+                    np.sum(fs.element.node_weights*np.array([fn(x) for x in node_coords]), axis=1)
         else:
             # Create a map from the vertices to the element nodes on the
             # reference cell.
@@ -106,7 +102,6 @@ class Function(object):
                 # Interpolate the coordinates to the cell nodes.
                 vertex_coords = fs.mesh.vertex_coords[cg1fs.cell_nodes[c, :], :]
                 node_coords = np.dot(coord_map, vertex_coords)
-
                 self.values[fs.cell_nodes[c, :]] = [fn(x) for x in node_coords]
 
     def plot(self, subdivisions=None):
