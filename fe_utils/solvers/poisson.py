@@ -18,7 +18,35 @@ def assemble(fs, f):
     the function space in which to solve and the right hand side
     function."""
 
-    raise NotImplementedError
+    # Create an appropriate (complete) quadrature rule.
+    Q = gauss_quadrature(fs.mesh.cell, fs.element.degree + 2)
+
+    # Tabulate the basis functions and their gradients at the quadrature points.
+    phi = fs.element.tabulate(Q.points)  # (points, nodes)
+    phi_grad = fs.element.tabulate(Q.points, grad=True)  # (points, nodes, dim)
+
+    A = sp.lil_matrix((fs.node_count, fs.node_count))
+    l = np.zeros(fs.node_count)
+
+    # Now loop over all the cells and assemble A and l
+    nodes = fs.cell_nodes
+    for c in range(fs.mesh.cell_vertices.shape[0]):
+        cell_nodes = fs.cell_nodes[c, :]
+        J = fs.mesh.jacobian(c)
+        detJ = np.abs(np.linalg.det(J))
+        l[cell_nodes] += (Q.weights * phi.T) @ (f.values[cell_nodes] @ phi.T) * detJ
+
+        inv_J = np.linalg.inv(J)
+        inv_J_phi_grad = np.einsum("dk, pnk->pnd", inv_J.T, phi_grad)
+        q_inv_J_phi_grad = np.einsum("p, pnk->nk", Q.weights, inv_J_phi_grad @ inv_J_phi_grad.swapaxes(1, 2))
+        A[np.ix_(nodes[c, :], nodes[c, :])] += q_inv_J_phi_grad * detJ
+
+    bound_nodes = boundary_nodes(fs)
+    l[bound_nodes] = 0
+    A[bound_nodes] = 0
+    A[bound_nodes, bound_nodes] = 1
+
+    return A, l
 
 
 def boundary_nodes(fs):
