@@ -15,30 +15,53 @@ def verrornorm(analytic_answer, u):
     return 0.0
 
 
-def assemble(fs, f):
-    Q = gauss_quadrature(fs.mesh.cell, fs.element.degree + 2)
-    phi = fs.element.tabulate(Q.points)  # (points, nodes)
-    phi_grad = fs.element.tabulate(Q.points, grad=True)  # (points, nodes, dim)
+def assemble(fs_u, fs_p, f):
+    n = fs_p.mesh.entity_counts[0]
+    m = 2*(n + fs_u.mesh.entity_counts[1])
+    F = np.zeros(m)
+    B = sp.lil_matrix((n, m))
+    A = sp.lil_matrix((m, m))
 
-    # Assemble F block and zero block
-    F = np.zeros(fs.mesh.cell_vertices.shape[0]*fs.element.node_count)
-    for c in range(fs.mesh.cell_vertices.shape[0]):
-        cell_nodes = fs.cell_nodes[c, :]
-        J = fs.mesh.jacobian(c)
+    Q_u = gauss_quadrature(fs_u.mesh.cell, fs_u.element.degree + 2)
+    phi = fs_u.element.tabulate(Q_u.points)
+    phi_grad = fs_u.element.tabulate(Q_u.points, grad=True)
+    psi = fs_p.element.tabulate(Q_u.points)
+
+    for c in range(fs_u.mesh.entity_counts[-1]):
+        cell_nodes_u = fs_u.cell_nodes[c, :]
+        cell_nodes_p = fs_p.cell_nodes[c, :]
+        J = fs_u.mesh.jacobian(c)
         detJ = np.abs(np.linalg.det(J))
-        values = f.values[cell_nodes].reshape(-1, 2)
+        inv_J = np.linalg.inv(J)
+        values = f.values[cell_nodes_u].reshape(-1, 2)
+        """ F-assembly """
         # multiply quadrature weights with the point indices of phi
-        weighted_phi = np.einsum("i, ijk->ijk", Q.weights, phi)
+        weighted_phi = np.einsum("p, pjk->pjk", Q_u.weights, phi)
         # multiply each function value with the correct node values
         values_phi = np.einsum("ij, pij->pij", values, phi)
-        F[cell_nodes] += (np.einsum("pnd, pjk-> nk", weighted_phi, values_phi) * detJ).flatten()
+        F[cell_nodes_u] += (np.einsum("pnd, pjk-> nk", weighted_phi, values_phi) * detJ).flatten()
+        """ A-assembly """
+        # J^{−T} ∇_XΦ_i(X)
+        inv_J_phi_grad = np.einsum("dk, pnkj->pnkj", inv_J.T, phi_grad)
+        # J^{−T} ∇_XΦ_i(X) + (J^{−T} ∇_XΦ_i(X))^T
+        inv_J_phi_grad2 = inv_J_phi_grad + inv_J_phi_grad.swapaxes(2, 3)
+        # multiply quadrature weights with the point indices of inv_J_phi_grad2
+        weighted_inv_J_phi_grad2 = np.einsum("p, pnkj->pnkj", Q_u.weights, inv_J_phi_grad2)
+        # Collapse the vector axes into one
+        weighted_inv_J_phi_grad2 = weighted_inv_J_phi_grad2.reshape((phi_grad.shape[0], -1, phi_grad.shape[-1]))
+        inv_J_phi_grad2 = inv_J_phi_grad2.reshape((phi_grad.shape[0], -1, phi_grad.shape[-1]))
+        # sum over quadrature weights and multiply
+        sum = np.einsum("pnd, pik->ni", weighted_inv_J_phi_grad2, inv_J_phi_grad2)
+        A[np.ix_(cell_nodes_u, cell_nodes_u)] += sum*detJ
+        """ B-assembly """
+        # Multiply psi basis by J^{−T} ∇_XΦ_i(X)
+        sum = np.einsum("pn, pik->ni", psi, weighted_inv_J_phi_grad2)
+        B[np.ix_(cell_nodes_p, cell_nodes_u)] = sum*detJ
 
-    F = F.reshape(-1, 2)
-    zero_block = np.zeros_like(F)
+    lhs = sp.bmat([[A, B.T], [B, None]])
+    rhs = np.hstack((F, np.zeros(n)))
 
-
-
-    return None, None
+    return lhs, rhs
 
 
 def solve_mastery(resolution, analytic=False, return_error=False):
@@ -53,32 +76,17 @@ def solve_mastery(resolution, analytic=False, return_error=False):
     """
 
     mesh = UnitSquareMesh(resolution, resolution)
-    fe = LagrangeElement(mesh.cell, 2)
-    vfe = VectorFiniteElement(fe)
-    fs = FunctionSpace(mesh, vfe)
-    analytic_answer = Function(fs)
-    # orthogonal gradient to γ?
-    analytic_answer.interpolate(lambda x: x)
-    if analytic:
-        return analytic_answer, 0.0
+    fe_p = LagrangeElement(mesh.cell, 1)
+    fe_u = LagrangeElement(mesh.cell, 2)
+    fe_u = VectorFiniteElement(fe_u)
+    fs_p = FunctionSpace(mesh, fe_p)
+    fs_u = FunctionSpace(mesh, fe_u)
 
-    f = Function(fs)
+    f = Function(fs_u)
     f.interpolate(lambda x: (2 * pi * (1 - cos(2 * pi * x[0])) * sin(2 * pi * x[1]),
                              -2 * pi * (1 - cos(2 * pi * x[1])) * sin(2 * pi * x[0])))
 
-    A, l = assemble(fs, f)
-
-    u = Function(fs)
-
-    A = sp.csr_matrix(A)
-    u.values[:] = splinalg.spsolve(A, l)
-
-    error = verrornorm(analytic_answer, u)
-
-    if return_error:
-        u.values -= analytic_answer.values
-
-    return u, error
+    lhs, rhs = assemble(fs_u, fs_p, f)
 
 
 if __name__ == "__main__":

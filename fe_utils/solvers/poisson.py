@@ -29,7 +29,6 @@ def assemble(fs, f):
     l = np.zeros(fs.node_count)
 
     # Now loop over all the cells and assemble A and l
-    nodes = fs.cell_nodes
     for c in range(fs.mesh.cell_vertices.shape[0]):
         cell_nodes = fs.cell_nodes[c, :]
         J = fs.mesh.jacobian(c)
@@ -39,7 +38,7 @@ def assemble(fs, f):
         inv_J = np.linalg.inv(J)
         inv_J_phi_grad = np.einsum("dk, pnk->pnd", inv_J.T, phi_grad)
         q_inv_J_phi_grad = np.einsum("p, pnk->nk", Q.weights, inv_J_phi_grad @ inv_J_phi_grad.swapaxes(1, 2))
-        A[np.ix_(nodes[c, :], nodes[c, :])] += q_inv_J_phi_grad * detJ
+        A[np.ix_(cell_nodes, cell_nodes)] += q_inv_J_phi_grad * detJ
 
     bound_nodes = boundary_nodes(fs)
     l[bound_nodes] = 0
