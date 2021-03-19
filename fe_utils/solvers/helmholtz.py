@@ -30,11 +30,11 @@ def assemble(fs, f):
     l = np.zeros(fs.node_count)
 
     # Now loop over all the cells and assemble A and l
-    for c in range(fs.mesh.cell_vertices.shape[0]):
+    for c in range(fs.mesh.entity_counts[-1]):
         cell_nodes = fs.cell_nodes[c, :]
         J = fs.mesh.jacobian(c)
         detJ = np.abs(np.linalg.det(J))
-        l[cell_nodes] += (Q.weights*phi.T) @ (f.values[cell_nodes] @ phi.T) * detJ
+        l[cell_nodes] += np.dot(Q.weights*phi.T, np.dot(f.values[cell_nodes], phi.T)) * detJ
 
         inv_J = np.linalg.inv(J)
         phi_2 = (Q.weights*phi.T) @ phi

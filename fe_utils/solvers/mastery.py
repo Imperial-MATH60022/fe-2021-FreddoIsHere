@@ -56,18 +56,19 @@ def assemble(fs_u, fs_p, f):
         """ B-assembly """
         # Multiply psi basis by J^{−T} ∇_XΦ_i(X)
         sum = np.einsum("pn, pik->ni", psi, weighted_inv_J_phi_grad2)
+        print(sum)
         B[np.ix_(cell_nodes_p, cell_nodes_u)] = sum*detJ
 
-    lhs = sp.bmat([[A, B.T], [B, None]])
+    lhs = sp.bmat([[A, B.T], [B, None]], "lil")
     rhs = np.hstack((F, np.zeros(n)))
     # enforcing zero-Dirichlet on V
-    u_bound_nodes = boundary_nodes(fs_u)
-    lhs[u_bound_nodes] = 0
-    rhs[u_bound_nodes] = 0
+    #u_bound_nodes = boundary_nodes(fs_u)
+    #lhs[u_bound_nodes] = 0
+    #rhs[u_bound_nodes] = 0
     # enforcing zero-Dirichlet at arbitrary node
-    arb_node = np.random.randint(low=m, high=m+n)
-    lhs[arb_node] = 0
-    rhs[arb_node] = 0
+    #arb_node = np.random.randint(low=m, high=m+n)
+    #lhs[arb_node] = 0
+    #rhs[arb_node] = 0
 
     return lhs, rhs
 
@@ -84,9 +85,9 @@ def boundary_nodes(fs):
     def on_boundary(x):
         """Return 1 if on the boundary, 0. otherwise."""
         if x[0] < eps or x[0] > 1 - eps or x[1] < eps or x[1] > 1 - eps:
-            return 1.
+            return 1., 1.
         else:
-            return 0.
+            return 0., 0.
 
     f.interpolate(on_boundary)
 
@@ -116,6 +117,17 @@ def solve_mastery(resolution, analytic=False, return_error=False):
                              -2 * pi * (1 - cos(2 * pi * x[1])) * sin(2 * pi * x[0])))
 
     lhs, rhs = assemble(fs_u, fs_p, f)
+    u = Function(fs_u)
+
+    lhs = sp.csc_matrix(lhs)
+    LU = splinalg.splu(lhs)
+    result = LU.solve(rhs)
+    #n = fs_p.mesh.entity_counts[0]
+    #m = 2*(n + fs_u.mesh.entity_counts[1])
+    #u.values[:] = result[:m]
+    #print(u.values.shape)
+
+    #return u, 0
 
 
 if __name__ == "__main__":
