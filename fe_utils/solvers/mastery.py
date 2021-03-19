@@ -33,13 +33,15 @@ def assemble(fs_u, fs_p, f):
         J = fs_u.mesh.jacobian(c)
         detJ = np.abs(np.linalg.det(J))
         inv_J = np.linalg.inv(J)
-        values = f.values[cell_nodes_u].reshape(-1, 2)
+        values = f.values[cell_nodes_u]
         """ F-assembly """
         # multiply quadrature weights with the point indices of phi
         weighted_phi = np.einsum("p, pjk->pjk", Q_u.weights, phi)
-        # multiply each function value with the correct node values
-        values_phi = np.einsum("ij, pij->pij", values, phi)
-        F[cell_nodes_u] += (np.einsum("pnd, pjk-> nk", weighted_phi, values_phi) * detJ).flatten()
+        # multiply each function value with the correct node values and sum over nodes
+        values_phi = np.einsum("j, pjk->pk", values, phi)
+        # Sum over quadrature points, multiply by node_weights
+        F[cell_nodes_u] += np.sum(fs_u.element.node_weights*np.einsum("pnd, pk-> nk", weighted_phi, values_phi), axis=1) * detJ
+
         """ A-assembly """
         # J^{−T} ∇_XΦ_i(X)
         inv_J_phi_grad = np.einsum("dk, pnkj->pnkj", inv_J.T, phi_grad)
@@ -47,28 +49,24 @@ def assemble(fs_u, fs_p, f):
         inv_J_phi_grad2 = inv_J_phi_grad + inv_J_phi_grad.swapaxes(2, 3)
         # multiply quadrature weights with the point indices of inv_J_phi_grad2
         weighted_inv_J_phi_grad2 = np.einsum("p, pnkj->pnkj", Q_u.weights, inv_J_phi_grad2)
-        # Collapse the vector axes into one
-        weighted_inv_J_phi_grad2 = weighted_inv_J_phi_grad2.reshape((phi_grad.shape[0], -1, phi_grad.shape[-1]))
-        inv_J_phi_grad2 = inv_J_phi_grad2.reshape((phi_grad.shape[0], -1, phi_grad.shape[-1]))
-        # sum over quadrature weights and multiply
-        sum = np.einsum("pnd, pik->ni", weighted_inv_J_phi_grad2, inv_J_phi_grad2)
+        # Apply :-operator
+        sum = np.einsum("pnkj, pikj->ni", (1/4)*weighted_inv_J_phi_grad2, inv_J_phi_grad2)
         A[np.ix_(cell_nodes_u, cell_nodes_u)] += sum*detJ
         """ B-assembly """
-        # Multiply psi basis by J^{−T} ∇_XΦ_i(X)
-        #print(psi.shape, weighted_inv_J_phi_grad2.shape, B[np.ix_(cell_nodes_p, cell_nodes_u)])
-        sum = np.einsum("pn, pik->ni", psi, weighted_inv_J_phi_grad2)
+        # Multiply psi basis by J^{−T} ∇_XΦ_i(X) J^{−T} ∇_YΦ_i(X) aka divergence
+        sum = np.einsum("pn, pikj->ni", psi, weighted_inv_J_phi_grad2)
         B[np.ix_(cell_nodes_p, cell_nodes_u)] = sum*detJ
 
     lhs = sp.bmat([[A, B.T], [B, None]], "lil")
     rhs = np.hstack((F, np.zeros(n)))
     # enforcing zero-Dirichlet on V
-    #u_bound_nodes = boundary_nodes(fs_u)
-    #lhs[u_bound_nodes] = 0
-    #rhs[u_bound_nodes] = 0
+    u_bound_nodes = boundary_nodes(fs_u)
+    lhs[u_bound_nodes] = 0
+    rhs[u_bound_nodes] = 0
     # enforcing zero-Dirichlet at arbitrary node
-    #arb_node = np.random.randint(low=m, high=m+n)
-    #lhs[arb_node] = 0
-    #rhs[arb_node] = 0
+    arb_node = np.random.randint(low=m, high=m+n)
+    lhs[arb_node] = 0
+    rhs[arb_node] = 0
 
     return lhs, rhs
 
@@ -112,6 +110,14 @@ def solve_mastery(resolution, analytic=False, return_error=False):
     fs_p = FunctionSpace(mesh, fe_p)
     fs_u = FunctionSpace(mesh, fe_u)
 
+    # Create a function to hold the analytic solution for comparison purposes aka skew gradient of γ
+    analytic_answer = Function(fs_u)
+    analytic_answer.interpolate(lambda x: (2 * pi * (cos(2 * pi * x[0])-1) * sin(2 * pi * x[1]),
+                                           -2 * pi * (cos(2 * pi * x[1])-1) * sin(2 * pi * x[0])))
+
+    if analytic:
+        return analytic_answer, 0.0
+
     f = Function(fs_u)
     f.interpolate(lambda x: (2 * pi * (1 - cos(2 * pi * x[0])) * sin(2 * pi * x[1]),
                              -2 * pi * (1 - cos(2 * pi * x[1])) * sin(2 * pi * x[0])))
@@ -122,12 +128,11 @@ def solve_mastery(resolution, analytic=False, return_error=False):
     lhs = sp.csc_matrix(lhs)
     LU = splinalg.splu(lhs)
     result = LU.solve(rhs)
-    #n = fs_p.mesh.entity_counts[0]
-    #m = 2*(n + fs_u.mesh.entity_counts[1])
-    #u.values[:] = result[:m]
-    #print(u.values.shape)
+    n = fs_p.mesh.entity_counts[0]
+    m = 2*(n + fs_u.mesh.entity_counts[1])
+    u.values[:] = result[:m]
 
-    #return u, 0
+    return u, 0
 
 
 if __name__ == "__main__":
