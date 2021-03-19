@@ -60,8 +60,37 @@ def assemble(fs_u, fs_p, f):
 
     lhs = sp.bmat([[A, B.T], [B, None]])
     rhs = np.hstack((F, np.zeros(n)))
+    # enforcing zero-Dirichlet on V
+    u_bound_nodes = boundary_nodes(fs_u)
+    lhs[u_bound_nodes] = 0
+    rhs[u_bound_nodes] = 0
+    # enforcing zero-Dirichlet at arbitrary node
+    arb_node = np.random.randint(low=m, high=m+n)
+    lhs[arb_node] = 0
+    rhs[arb_node] = 0
 
     return lhs, rhs
+
+
+def boundary_nodes(fs):
+    """Find the list of boundary nodes in fs. This is a
+    unit-square-specific solution. A more elegant solution would employ
+    the mesh topology and numbering.
+    """
+    eps = 1.e-10
+
+    f = Function(fs)
+
+    def on_boundary(x):
+        """Return 1 if on the boundary, 0. otherwise."""
+        if x[0] < eps or x[0] > 1 - eps or x[1] < eps or x[1] > 1 - eps:
+            return 1.
+        else:
+            return 0.
+
+    f.interpolate(on_boundary)
+
+    return np.flatnonzero(f.values)
 
 
 def solve_mastery(resolution, analytic=False, return_error=False):
