@@ -82,20 +82,21 @@ class Function(object):
 
         fs = self.function_space
         cg1 = LagrangeElement(fs.element.cell, 1)
-        cg1fs = FunctionSpace(fs.mesh, cg1)
 
         if isinstance(fs.element, VectorFiniteElement):
             vcg1 = VectorFiniteElement(cg1)
-            coord_map = vcg1.tabulate(fs.element.nodes)  # (points, nodes, dim)
+            vcg1fs = FunctionSpace(fs.mesh, vcg1)
+            coord_map = vcg1.tabulate(fs.element.nodes)
             for c in range(fs.mesh.entity_counts[-1]):
                 # Interpolate the coordinates to the cell nodes.
-                vertex_coords = fs.mesh.vertex_coords[cg1fs.cell_nodes[c, :], :]
-                node_coords = np.einsum("pkl, kd-> pd", coord_map, vertex_coords)
+                vertex_coords = fs.mesh.vertex_coords[vcg1fs.cell_nodes[c, :]//fs.element.cell.dim, :]
+                node_coords = (1/2)*np.einsum("pnd, ni->pi", coord_map, vertex_coords)
                 self.values[fs.cell_nodes[c, :]] = \
                     np.sum(fs.element.node_weights*np.array([fn(x) for x in node_coords]), axis=1)
         else:
             # Create a map from the vertices to the element nodes on the
             # reference cell.
+            cg1fs = FunctionSpace(fs.mesh, cg1)
             coord_map = cg1.tabulate(fs.element.nodes)
 
             for c in range(fs.mesh.entity_counts[-1]):

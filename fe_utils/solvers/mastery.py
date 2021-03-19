@@ -55,8 +55,8 @@ def assemble(fs_u, fs_p, f):
         A[np.ix_(cell_nodes_u, cell_nodes_u)] += sum*detJ
         """ B-assembly """
         # Multiply psi basis by J^{−T} ∇_XΦ_i(X)
+        #print(psi.shape, weighted_inv_J_phi_grad2.shape, B[np.ix_(cell_nodes_p, cell_nodes_u)])
         sum = np.einsum("pn, pik->ni", psi, weighted_inv_J_phi_grad2)
-        print(sum)
         B[np.ix_(cell_nodes_p, cell_nodes_u)] = sum*detJ
 
     lhs = sp.bmat([[A, B.T], [B, None]], "lil")

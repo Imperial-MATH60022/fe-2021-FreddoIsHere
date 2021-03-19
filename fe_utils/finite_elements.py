@@ -222,6 +222,7 @@ class VectorFiniteElement:
         einsum_string = "ik, j-> ikj" if grad else "i, j-> ij"
         phi = self.finite_element.tabulate(points, grad)
         raw_shape = list(phi.shape)
+        raw_shape[1] *= self.cell.dim
         vphi = np.zeros(raw_shape + [2])
 
         for i in range(vphi.shape[1]):
