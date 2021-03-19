@@ -1,3 +1,4 @@
+#! /usr/bin/env python
 from fe_utils import *
 from fe_utils.finite_elements import VectorFiniteElement
 from math import cos, sin, pi
@@ -7,6 +8,6 @@ ve = VectorFiniteElement(se)
 m = UnitSquareMesh(10, 10)
 fs = FunctionSpace(m, ve)
 f = Function(fs)
-f.interpolate(lambda x: (2*pi*(1 - cos(2*pi*x[0]))*sin(2*pi*x[1]),
-                         -2*pi*(1 - cos(2*pi*x[1]))*sin(2*pi*x[0])))
+f.interpolate(lambda x: (2 * pi * (1 - cos(2 * pi * x[0])) * sin(2 * pi * x[1]),
+                             -2 * pi * (1 - cos(2 * pi * x[1])) * sin(2 * pi * x[0])))
 f.plot()
