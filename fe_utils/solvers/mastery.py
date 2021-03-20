@@ -36,26 +36,26 @@ def assemble(fs_u, fs_p, f):
         values = f.values[cell_nodes_u]
         """ F-assembly """
         # multiply quadrature weights with the point indices of phi
-        weighted_phi = np.einsum("p, pjk->pjk", Q_u.weights, phi)
+        weighted_phi = np.einsum("p, pjk->pjk", Q_u.weights, phi)  # safe
         # multiply each function value with the correct node values and sum over nodes
-        values_phi = np.einsum("j, pjk->pk", values, phi)
+        values_phi = np.einsum("j, pjk->pk", values, phi)  # safe
         # Sum over quadrature points, multiply by node_weights
-        F[cell_nodes_u] += np.sum(fs_u.element.node_weights*np.einsum("pnd, pk-> nk", weighted_phi, values_phi), axis=1) * detJ
+        F[cell_nodes_u] += np.einsum("pnd, pk-> n", weighted_phi, values_phi) * detJ
 
         """ A-assembly """
         # J^{−T} ∇_XΦ_i(X)
-        inv_J_phi_grad = np.einsum("dk, pnkj->pnkj", inv_J.T, phi_grad)
+        inv_J_phi_grad = np.einsum("dk, pnkj->pnkj", inv_J.T, phi_grad)  # safe
         # J^{−T} ∇_XΦ_i(X) + (J^{−T} ∇_XΦ_i(X))^T
-        inv_J_phi_grad2 = inv_J_phi_grad + inv_J_phi_grad.swapaxes(2, 3)
+        inv_J_phi_grad2 = inv_J_phi_grad + inv_J_phi_grad.swapaxes(2, 3)  # safe
         # multiply quadrature weights with the point indices of inv_J_phi_grad2
-        weighted_inv_J_phi_grad2 = np.einsum("p, pnkj->pnkj", Q_u.weights, inv_J_phi_grad2)
+        weighted_inv_J_phi_grad2 = np.einsum("p, pnkj->pnkj", Q_u.weights, inv_J_phi_grad2)  # safe
         # Apply :-operator
-        sum = np.einsum("pnkj, pikj->ni", (1/4)*weighted_inv_J_phi_grad2, inv_J_phi_grad2)
-        A[np.ix_(cell_nodes_u, cell_nodes_u)] += sum*detJ
+        sum_A = np.einsum("pnkj, pikj->ni", (1/4)*weighted_inv_J_phi_grad2, inv_J_phi_grad2)
+        A[np.ix_(cell_nodes_u, cell_nodes_u)] += sum_A*detJ
         """ B-assembly """
         # Multiply psi basis by J^{−T} ∇_XΦ_i(X) J^{−T} ∇_YΦ_i(X) aka divergence
-        sum = np.einsum("pn, pikj->ni", psi, weighted_inv_J_phi_grad2)
-        B[np.ix_(cell_nodes_p, cell_nodes_u)] = sum*detJ
+        sum_B = np.einsum("pn, pikj->ni", psi, weighted_inv_J_phi_grad2)
+        B[np.ix_(cell_nodes_p, cell_nodes_u)] = sum_B*detJ
 
     lhs = sp.bmat([[A, B.T], [B, None]], "lil")
     rhs = np.hstack((F, np.zeros(n)))
