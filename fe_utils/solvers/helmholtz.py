@@ -8,6 +8,7 @@ from numpy import cos, pi
 import scipy.sparse as sp
 import scipy.sparse.linalg as splinalg
 from argparse import ArgumentParser
+from itertools import product
 
 
 def assemble(fs, f):
@@ -15,11 +16,12 @@ def assemble(fs, f):
     the function space in which to solve and the right hand side
     function."""
 
-    raise NotImplementedError
-
     # Create an appropriate (complete) quadrature rule.
+    Q = gauss_quadrature(fs.mesh.cell, fs.element.degree + 2)
 
     # Tabulate the basis functions and their gradients at the quadrature points.
+    phi = fs.element.tabulate(Q.points)  # (points, nodes)
+    phi_grad = fs.element.tabulate(Q.points, grad=True)  # (points, nodes, dim)
 
     # Create the left hand side matrix and right hand side vector.
     # This creates a sparse matrix because creating a dense one may
@@ -28,6 +30,17 @@ def assemble(fs, f):
     l = np.zeros(fs.node_count)
 
     # Now loop over all the cells and assemble A and l
+    for c in range(fs.mesh.entity_counts[-1]):
+        cell_nodes = fs.cell_nodes[c, :]
+        J = fs.mesh.jacobian(c)
+        detJ = np.abs(np.linalg.det(J))
+        l[cell_nodes] += np.dot(Q.weights*phi.T, np.dot(f.values[cell_nodes], phi.T)) * detJ
+
+        inv_J = np.linalg.inv(J)
+        phi_2 = (Q.weights*phi.T) @ phi
+        inv_J_phi_grad = np.einsum("dk, pnk->pnd", inv_J.T, phi_grad)
+        q_inv_J_phi_grad = np.einsum("p, pnk->nk", Q.weights, inv_J_phi_grad @ inv_J_phi_grad.swapaxes(1, 2))
+        A[np.ix_(cell_nodes, cell_nodes)] += (q_inv_J_phi_grad + phi_2) * detJ
 
     return A, l
 

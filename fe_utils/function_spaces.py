@@ -1,9 +1,11 @@
 import numpy as np
 from . import ReferenceTriangle, ReferenceInterval
-from .finite_elements import LagrangeElement, lagrange_points
+from .finite_elements import LagrangeElement, lagrange_points, VectorFiniteElement
 from matplotlib import pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 from matplotlib.tri import Triangulation
+from itertools import product
+from .quadrature import gauss_quadrature
 
 
 class FunctionSpace(object):
@@ -23,7 +25,8 @@ class FunctionSpace(object):
         #: The :class:`~.finite_elements.FiniteElement` of this space.
         self.element = element
 
-        raise NotImplementedError
+        G = lambda d, i: np.sum([element.nodes_per_entity[delta]*mesh.entity_counts[delta] for delta in range(d)]) + \
+                         i*element.nodes_per_entity[d]  # G(d, i) as in the notes
 
         # Implement global numbering in order to produce the global
         # cell node list for this space.
@@ -31,7 +34,12 @@ class FunctionSpace(object):
         #: which each row lists the global nodes incident to the corresponding
         #: cell. The implementation of this member is left as an
         #: :ref:`exercise <ex-function-space>`
-        self.cell_nodes = None
+        self.cell_nodes = np.zeros((mesh.entity_counts[-1], element.node_count), dtype=int)
+        for c_idx, delta in product(range(mesh.cell_vertices.shape[0]), range(mesh.cell.dim+1)):
+            for epsilon in range(mesh.cell.entity_counts[delta]):
+                locals = element.entity_nodes[delta][epsilon]  # e(δ,ϵ) as in the notes
+                i = c_idx if delta == mesh.cell.dim else mesh.adjacency(mesh.cell.dim, delta)[c_idx, epsilon]
+                self.cell_nodes[c_idx, locals] = [G(delta, i) + n for n in range(element.nodes_per_entity[delta])]
 
         #: The total number of nodes in the function space.
         self.node_count = np.dot(element.nodes_per_entity, mesh.entity_counts)
@@ -73,19 +81,29 @@ class Function(object):
         """
 
         fs = self.function_space
-
-        # Create a map from the vertices to the element nodes on the
-        # reference cell.
         cg1 = LagrangeElement(fs.element.cell, 1)
-        coord_map = cg1.tabulate(fs.element.nodes)
-        cg1fs = FunctionSpace(fs.mesh, cg1)
 
-        for c in range(fs.mesh.entity_counts[-1]):
-            # Interpolate the coordinates to the cell nodes.
-            vertex_coords = fs.mesh.vertex_coords[cg1fs.cell_nodes[c, :], :]
-            node_coords = np.dot(coord_map, vertex_coords)
+        if isinstance(fs.element, VectorFiniteElement):
+            vcg1 = VectorFiniteElement(cg1)
+            vcg1fs = FunctionSpace(fs.mesh, vcg1)
+            coord_map = vcg1.tabulate(fs.element.nodes)
+            for c in range(fs.mesh.entity_counts[-1]):
+                # Interpolate the coordinates to the cell nodes.
+                vertex_coords = fs.mesh.vertex_coords[vcg1fs.cell_nodes[c, :]//fs.element.cell.dim, :]
+                node_coords = (1/2)*np.einsum("pnd, ni->pi", coord_map, vertex_coords)
+                self.values[fs.cell_nodes[c, :]] = \
+                    np.sum(fs.element.node_weights*np.array([fn(x) for x in node_coords]), axis=1)
+        else:
+            # Create a map from the vertices to the element nodes on the
+            # reference cell.
+            cg1fs = FunctionSpace(fs.mesh, cg1)
+            coord_map = cg1.tabulate(fs.element.nodes)
 
-            self.values[fs.cell_nodes[c, :]] = [fn(x) for x in node_coords]
+            for c in range(fs.mesh.entity_counts[-1]):
+                # Interpolate the coordinates to the cell nodes.
+                vertex_coords = fs.mesh.vertex_coords[cg1fs.cell_nodes[c, :], :]
+                node_coords = np.dot(coord_map, vertex_coords)
+                self.values[fs.cell_nodes[c, :]] = [fn(x) for x in node_coords]
 
     def plot(self, subdivisions=None):
         """Plot the value of this :class:`Function`. This is quite a low
@@ -102,6 +120,17 @@ class Function(object):
         """
 
         fs = self.function_space
+
+        if isinstance(fs.element, VectorFiniteElement):
+            coords = Function(fs)
+            coords.interpolate(lambda x: x)
+            fig = plt.figure()
+            ax = fig.gca()
+            x = coords.values.reshape(-1, 2)
+            v = self.values.reshape(-1, 2)
+            plt.quiver(x[:, 0], x[:, 1], v[:, 0], v[:, 1])
+            plt.show()
+            return
 
         d = subdivisions or (2 * (fs.element.degree + 1) if fs.element.degree > 1 else 2)
 
@@ -166,5 +195,14 @@ class Function(object):
         """Integrate this :class:`Function` over the domain.
 
         :result: The integral (a scalar)."""
+        fe = self.function_space.element
+        Q = gauss_quadrature(fe.cell, fe.degree)  # 1. Quadrature Rule
+        phi = fe.tabulate(Q.points)  # 2. Tabulation
+        integral = 0
+        for c in range(self.function_space.mesh.entity_counts[-1]):
+            nodes = self.function_space.cell_nodes[c, :]
+            J = self.function_space.mesh.jacobian(c)
+            detJ = np.abs(np.linalg.det(J))  # |J|
+            integral += (self.values[nodes] @ phi.T) @ Q.weights * detJ  # sum over each cell
 
-        raise NotImplementedError
+        return integral
